@@ -1,0 +1,547 @@
+---
+title: "HW5"
+author: "Minye Zhou"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE,cache = TRUE, cache.lazy = FALSE)
+set.seed(49)
+#knitr::opts_knit$set(root.dir = 'your/working/dir')
+# library(reticulate) <- If you wanna run python in RStudio
+# py_install(packages = "matplotlib") <- Here is the equivalent of pip install
+# py_install(packages = "numpy")
+# py_install(packages = "pandas")
+```
+
+## Part I: Single cell RNA-seq analysis
+
+### Load data and create seurat object
+
+```{r libraries, message = FALSE}
+#install.packages(c("Seurat", "harmony"))
+library(Seurat)
+library(harmony)
+#Your answer here: Load the data of the donors
+data_dirPR1 <- '/Users/yeye/Desktop/Spring2023/BST282/data/PR1-Normal'
+dataPR1 <- Read10X(data.dir = data_dirPR1)
+seurat_objectPR1 = CreateSeuratObject(counts = dataPR1)
+
+data_dirPR1t <- '/Users/yeye/Desktop/Spring2023/BST282/data/PR1-tumor'
+dataPR1_tumor <- Read10X(data.dir = data_dirPR1t)
+seurat_objectPR1_tumor = CreateSeuratObject(counts = dataPR1_tumor)
+
+data_dirPR2 <- '/Users/yeye/Desktop/Spring2023/BST282/data/PR2-Normal'
+dataPR2 <- Read10X(data.dir = data_dirPR2)
+seurat_objectPR2 = CreateSeuratObject(counts = dataPR2)
+
+data_dirPR2_tumor <- '/Users/yeye/Desktop/Spring2023/BST282/data/PR2-tumor'
+dataPR2_tumor <- Read10X(data.dir = data_dirPR2_tumor)
+seurat_objectPR2_tumor = CreateSeuratObject(counts = dataPR2_tumor)
+
+data_dirPR6 <- '/Users/yeye/Desktop/Spring2023/BST282/data/PR6-Normal'
+dataPR6 <- Read10X(data.dir = data_dirPR6)
+seurat_objectPR6 = CreateSeuratObject(counts = dataPR6)
+
+data_dirPR6_tumor <- '/Users/yeye/Desktop/Spring2023/BST282/data/PR6-tumor'
+dataPR6_tumor <- Read10X(data.dir = data_dirPR6_tumor)
+seurat_objectPR6_tumor = CreateSeuratObject(counts = dataPR6_tumor)
+
+seurat_objectPR1$sample <- "PR1-Normal"
+seurat_objectPR1$group <- "normal"
+
+seurat_objectPR1_tumor$sample <- "PR1-Tumor"
+seurat_objectPR1_tumor$group <- "tumor"
+
+seurat_objectPR2$sample <- "PR2-Normal"
+seurat_objectPR2$group <- "normal"
+
+seurat_objectPR2_tumor$sample <- "PR2-Tumor"
+seurat_objectPR2_tumor$group <- "tumor"
+
+seurat_objectPR6$sample <- "PR6-Normal"
+seurat_objectPR6$group <- "normal"
+
+seurat_objectPR6_tumor$sample <- "PR6-Tumor"
+seurat_objectPR6_tumor$group <- "tumor"
+```
+
+
+```{r}
+# your answer here
+library(ggplot2)
+seurat_objectPR1[["percent.mt"]] <- PercentageFeatureSet(seurat_objectPR1, pattern = "^MT-")
+View(seurat_objectPR1@meta.data)
+```
+
+```{r}
+VlnPlot(seurat_objectPR1, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+FeatureScatter(seurat_objectPR1, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")+
+  geom_hline(aes(yintercept = 1000), color = "blue", linetype = "dashed", size = 1)+
+  geom_smooth(method = 'lm')
+FeatureScatter(seurat_objectPR1, feature1 = "nCount_RNA", feature2 = "percent.mt")+
+  geom_hline(aes(yintercept = 10), color = "blue", linetype = "dashed", size = 1)+
+  geom_smooth(method = 'lm')
+```
+
+```{r}
+seurat_objectPR1 <- subset(seurat_objectPR1, subset = nFeature_RNA > 200 & nFeature_RNA < 1000 & percent.mt < 10 & nCount_RNA < 5000)
+```
+
+```{r}
+seurat_objectPR1
+```
+
+```{r}
+seurat_objectPR1_tumor[["percent.mt"]] <- PercentageFeatureSet(seurat_objectPR1_tumor, pattern = "^MT-")
+View(seurat_objectPR1_tumor@meta.data)
+
+VlnPlot(seurat_objectPR1_tumor, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+FeatureScatter(seurat_objectPR1_tumor, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")+
+  geom_hline(aes(yintercept = 1500), color = "blue", linetype = "dashed", size = 1)+
+  geom_smooth(method = 'lm')
+FeatureScatter(seurat_objectPR1_tumor, feature1 = "nCount_RNA", feature2 = "percent.mt")+
+  geom_hline(aes(yintercept = 20), color = "blue", linetype = "dashed", size = 1)+
+  geom_smooth(method = 'lm')
+```
+
+```{r}
+seurat_objectPR1_tumor <- subset(seurat_objectPR1_tumor, subset = nFeature_RNA > 200 & nFeature_RNA < 1500 & percent.mt < 20 & nCount_RNA < 5000)
+```
+
+```{r}
+seurat_objectPR2[["percent.mt"]] <- PercentageFeatureSet(seurat_objectPR2, pattern = "^MT-")
+View(seurat_objectPR2@meta.data)
+
+VlnPlot(seurat_objectPR2, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+FeatureScatter(seurat_objectPR2, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")+
+  geom_hline(aes(yintercept = 1500), color = "blue", linetype = "dashed", size = 1)+
+  geom_smooth(method = 'lm')
+FeatureScatter(seurat_objectPR2, feature1 = "nCount_RNA", feature2 = "percent.mt")+
+  geom_hline(aes(yintercept = 10), color = "blue", linetype = "dashed", size = 1)+
+  geom_smooth(method = 'lm')
+```
+
+```{r}
+seurat_objectPR2 <- subset(seurat_objectPR2, subset = nFeature_RNA > 200 & nFeature_RNA < 1500 & percent.mt < 10 & nCount_RNA < 5000)
+```
+
+```{r}
+seurat_objectPR2_tumor[["percent.mt"]] <- PercentageFeatureSet(seurat_objectPR2_tumor, pattern = "^MT-")
+
+VlnPlot(seurat_objectPR2_tumor, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+FeatureScatter(seurat_objectPR2_tumor, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")+
+  geom_hline(aes(yintercept = 1500), color = "blue", linetype = "dashed", size = 1)+
+  geom_smooth(method = 'lm')
+FeatureScatter(seurat_objectPR2_tumor, feature1 = "nCount_RNA", feature2 = "percent.mt")+
+  geom_hline(aes(yintercept = 3), color = "blue", linetype = "dashed", size = 1)+
+  geom_smooth(method = 'lm')
+```
+
+```{r}
+seurat_objectPR2_tumor <- subset(seurat_objectPR2_tumor, subset = nFeature_RNA > 200 & nFeature_RNA < 1500 & percent.mt < 3 & nCount_RNA < 5000)
+```
+
+```{r}
+seurat_objectPR6[["percent.mt"]] <- PercentageFeatureSet(seurat_objectPR6, pattern = "^MT-")
+
+VlnPlot(seurat_objectPR6, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+FeatureScatter(seurat_objectPR6, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")+
+  geom_hline(aes(yintercept = 2000), color = "blue", linetype = "dashed", size = 1)+
+  geom_smooth(method = 'lm')
+FeatureScatter(seurat_objectPR6, feature1 = "nCount_RNA", feature2 = "percent.mt")+
+  geom_hline(aes(yintercept = 15), color = "blue", linetype = "dashed", size = 1)+
+  geom_smooth(method = 'lm')
+```
+
+```{r}
+seurat_objectPR6 <- subset(seurat_objectPR6, subset = nFeature_RNA > 200 & nFeature_RNA < 2000 & percent.mt < 15 & nCount_RNA < 5000)
+```
+
+```{r}
+seurat_objectPR6_tumor[["percent.mt"]] <- PercentageFeatureSet(seurat_objectPR6_tumor, pattern = "^MT-")
+
+VlnPlot(seurat_objectPR6_tumor, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+FeatureScatter(seurat_objectPR6_tumor, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")+
+  geom_hline(aes(yintercept = 2000), color = "blue", linetype = "dashed", size = 1)+
+  geom_smooth(method = 'lm')
+FeatureScatter(seurat_objectPR6_tumor, feature1 = "nCount_RNA", feature2 = "percent.mt")+
+  geom_hline(aes(yintercept = 5), color = "blue", linetype = "dashed", size = 1)+
+  geom_smooth(method = 'lm')
+```
+
+
+### Data normalization and scaling 
+
+```{r}
+# your answer here
+seurat_objectPR1 <- NormalizeData(seurat_objectPR1)
+seurat_objectPR1_tumor <- NormalizeData(seurat_objectPR1_tumor)
+seurat_objectPR2 <- NormalizeData(seurat_objectPR2)
+seurat_objectPR2_tumor <- NormalizeData(seurat_objectPR2_tumor)
+seurat_objectPR6 <- NormalizeData(seurat_objectPR6)
+seurat_objectPR6_tumor <- NormalizeData(seurat_objectPR6_tumor)
+```
+
+```{r}
+all.genes1 <- rownames(seurat_objectPR1)
+seurat_objectPR1 <- ScaleData(seurat_objectPR1, features = all.genes1)
+
+all.genes2 <- rownames(seurat_objectPR1_tumor)
+seurat_objectPR1_tumor <- ScaleData(seurat_objectPR1_tumor, features = all.genes2)
+
+all.genes3 <- rownames(seurat_objectPR2)
+seurat_objectPR2 <- ScaleData(seurat_objectPR2, features = all.genes3)
+
+all.genes4 <- rownames(seurat_objectPR2_tumor)
+seurat_objectPR2_tumor <- ScaleData(seurat_objectPR2_tumor, features = all.genes4)
+
+all.genes5 <- rownames(seurat_objectPR6)
+seurat_objectPR6 <- ScaleData(seurat_objectPR6, features = all.genes5)
+
+all.genes6 <- rownames(seurat_objectPR6_tumor)
+seurat_objectPR6_tumor <- ScaleData(seurat_objectPR6_tumor, features = all.genes6)
+```
+
+
+### Get highly variable genes and dimension reduction
+
+```{r}
+#get highly variable genes
+seurat_objectPR1 <- FindVariableFeatures(seurat_objectPR1, selection.method = "vst", nfeatures = 2000)
+top10_PR1 <- head(VariableFeatures(seurat_objectPR1), 10)
+
+seurat_objectPR1_tumor <- FindVariableFeatures(seurat_objectPR1_tumor, selection.method = "vst", nfeatures = 2000)
+top10_PR1_tumor <- head(VariableFeatures(seurat_objectPR1), 10)
+
+seurat_objectPR2 <- FindVariableFeatures(seurat_objectPR2, selection.method = "vst", nfeatures = 2000)
+top10_PR2 <- head(VariableFeatures(seurat_objectPR2), 10)
+
+seurat_objectPR2_tumor <- FindVariableFeatures(seurat_objectPR2_tumor, selection.method = "vst", nfeatures = 2000)
+top10_PR2_tumor <- head(VariableFeatures(seurat_objectPR2_tumor), 10)
+
+seurat_objectPR6 <- FindVariableFeatures(seurat_objectPR6, selection.method = "vst", nfeatures = 2000)
+top10_PR6 <- head(VariableFeatures(seurat_objectPR6), 10)
+
+seurat_objectPR6_tumor <- FindVariableFeatures(seurat_objectPR6_tumor, selection.method = "vst", nfeatures = 2000)
+top10_PR6_tumor <- head(VariableFeatures(seurat_objectPR6_tumor), 10)
+```
+
+```{r}
+#pca
+seurat_objectPR1 <- RunPCA(seurat_objectPR1, features = VariableFeatures(object = seurat_objectPR1))
+
+seurat_objectPR1_tumor <- RunPCA(seurat_objectPR1_tumor, features = VariableFeatures(object = seurat_objectPR1_tumor))
+
+seurat_objectPR2 <- RunPCA(seurat_objectPR2, features = VariableFeatures(object = seurat_objectPR2))
+
+seurat_objectPR2_tumor <- RunPCA(seurat_objectPR2_tumor, features = VariableFeatures(object = seurat_objectPR2_tumor))
+
+seurat_objectPR6 <- RunPCA(seurat_objectPR6, features = VariableFeatures(object = seurat_objectPR6))
+
+seurat_objectPR6_tumor <- RunPCA(seurat_objectPR6_tumor, features = VariableFeatures(object = seurat_objectPR6_tumor))
+```
+
+```{r}
+#visualize pca
+ElbowPlot(seurat_objectPR1)
+ElbowPlot(seurat_objectPR1_tumor)
+ElbowPlot(seurat_objectPR2)
+ElbowPlot(seurat_objectPR2_tumor)
+ElbowPlot(seurat_objectPR6)
+ElbowPlot(seurat_objectPR6_tumor)
+```
+
+```{r}
+#umap
+seurat_objectPR1 <- RunUMAP(seurat_objectPR1, dims = 1:15)
+DimPlot(seurat_objectPR1, reduction = "umap")
+
+seurat_objectPR1_tumor <- RunUMAP(seurat_objectPR1_tumor, dims = 1:15)
+DimPlot(seurat_objectPR1_tumor, reduction = "umap")
+
+seurat_objectPR2 <- RunUMAP(seurat_objectPR2, dims = 1:15)
+DimPlot(seurat_objectPR2, reduction = "umap")
+
+seurat_objectPR2_tumor <- RunUMAP(seurat_objectPR2_tumor, dims = 1:15)
+DimPlot(seurat_objectPR2_tumor, reduction = "umap")
+
+seurat_objectPR6 <- RunUMAP(seurat_objectPR6, dims = 1:15)
+DimPlot(seurat_objectPR6, reduction = "umap")
+
+seurat_objectPR6_tumor <- RunUMAP(seurat_objectPR6_tumor, dims = 1:15)
+DimPlot(seurat_objectPR6_tumor, reduction = "umap")
+```
+
+
+### Batch effect correction
+
+```{r}
+#remove useless
+total <- merge(seurat_objectPR1, y = c(seurat_objectPR1_tumor,seurat_objectPR2,seurat_objectPR2_tumor,seurat_objectPR6,seurat_objectPR6_tumor))
+rm(seurat_objectPR1,seurat_objectPR1_tumor,seurat_objectPR2,seurat_objectPR2_tumor,seurat_objectPR6,seurat_objectPR6_tumor)
+rm(data_dirPR1,data_dirPR1t,data_dirPR2,data_dirPR2_tumor,data_dirPR6,data_dirPR6_tumor)
+rm(dataPR1,dataPR1_tumor,dataPR2,dataPR2_tumor,dataPR6,dataPR6_tumor)
+rm(cts,nsclc.seurat.obj,nsclc.sparse.m)
+```
+
+```{r}
+#QC
+library(ggplot2)
+total[["percent.mt"]] <- PercentageFeatureSet(total, pattern = "^MT-")
+VlnPlot(total, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+FeatureScatter(total, feature1 = "nCount_RNA", feature2 = "percent.mt") +
+  geom_smooth(method = 'lm')+
+  geom_hline(aes(yintercept = 5), color = "blue", linetype = "dashed", linewidth = 1)
+
+FeatureScatter(total, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") +
+  geom_smooth(method = 'lm')+
+  geom_hline(aes(yintercept = 2500), color = "blue", linetype = "dashed", linewidth = 1)+
+  geom_hline(aes(yintercept = 200), color = "blue", linetype = "dashed", linewidth = 1)
+```
+
+```{r}
+total <- subset(total, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & 
+                             percent.mt < 5)
+```
+
+```{r}
+#normalize
+total <- NormalizeData(total)
+```
+
+```{r}
+# Identify highly variable features --------------
+total <- FindVariableFeatures(total, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10_total <- head(VariableFeatures(total), 10)
+```
+
+```{r}
+gc()
+all.genes_total <- rownames(total)
+total <- ScaleData(total, features = all.genes_total)
+```
+
+```{r}
+total <- RunPCA(total, features = VariableFeatures(object = total))
+```
+
+```{r}
+ElbowPlot(total)
+```
+
+
+```{r}
+set.seed(49)
+total<- RunUMAP(total, dims = 1:20, reduction = 'pca')
+```
+
+```{r}
+before <- DimPlot(total, reduction = 'umap',group.by = 'group')
+```
+
+```{r}
+set.seed(49)
+#harmony
+total.harmony <- total %>%
+  RunHarmony(group.by.vars = 'group', plot_convergence = FALSE)
+
+#total.harmony@reductions
+
+#total.harmony.embed <- Embeddings(total.harmony, "harmony")
+#total.harmony.embed[1:10,1:10]
+```
+
+```{r,cache=TRUE}
+set.seed(49)
+total.harmony <- total.harmony %>%
+  RunUMAP(reduction = 'harmony', dims = 1:50) %>%
+  FindNeighbors(reduction = "harmony", dims = 1:50) %>%
+  FindClusters(resolution = 0.5)
+
+# visualize 
+after <- DimPlot(total.harmony, reduction = 'umap', group.by = 'group')
+
+before|after
+```
+
+```{r}
+DimPlot(total, reduction = 'umap', group.by = 'sample')|DimPlot(total.harmony, reduction = 'umap', group.by = 'sample')
+```
+
+
+### Unsupervised clusterin
+
+```{r}
+set.seed(49)
+total.harmony <- FindNeighbors(total.harmony, dims = 1:20)
+
+# understanding resolution
+total.harmony <- FindClusters(total.harmony, resolution = c(0.1,0.3, 0.5, 0.7, 1))
+View(total.harmony@meta.data)
+
+DimPlot(total.harmony, group.by = "RNA_snn_res.0.1", label = TRUE)
+DimPlot(total.harmony, group.by = "RNA_snn_res.0.3", label = TRUE)
+DimPlot(total.harmony, group.by = "RNA_snn_res.0.5", label = TRUE)
+DimPlot(total.harmony, group.by = "RNA_snn_res.0.7", label = TRUE)
+DimPlot(total.harmony, group.by = "RNA_snn_res.1", label = TRUE)
+```
+
+```{r}
+set.seed(49)
+total.harmony <- FindClusters(total.harmony, resolution = 0.5)
+table(total.harmony$seurat_clusters)
+```
+
+### Manual cell annotation
+
+```{r}
+library(tidyverse)
+#install.packages('BiocManager')
+library(BiocManager)
+#BiocManager::install('multtest')
+#install.packages('metap')
+```
+
+```{r}
+library(multtest)
+library(metap)
+```
+
+```{r}
+set.seed(49)
+markers <- FindAllMarkers(total.harmony,
+               logfc.threshold = 0.25,
+               min.pct = 0.25,
+               only.pos = TRUE)
+```
+
+```{r}
+library(dplyr)
+set.seed(49)
+sorted_markers <- markers[order(markers$cluster, markers$p_val_adj),]
+
+top_genes_per_cluster <- markers %>%
+  group_by(cluster) %>%
+  arrange(p_val_adj) %>%
+  slice_head(n=5) %>%
+  ungroup()
+
+top_genes_per_cluster
+```
+
+
+
+```{r}
+cluster_to_celltype <- c("0" = "T-cells",
+                         "1" = "Sertoli cells",
+                         "2" = "Tumor1",
+                         "3" = "CD8+ T-cell",
+                         "4" = "Tumor2",
+                         "5" = "NK-cells",
+                         "6" = "Tumor3",
+                         "7" = "Leydig cells",
+                         "8" = "Tumor4",
+                         "9" = "B-cells",
+                         "10" = "T-reg",
+                         "11" = "Tumor5",
+                         "12" = "Tumor6",
+                         "13" = "Tumor7",
+                         "14" = "Granulocytes",
+                         "15" = "Distal tubular cells",
+                         "16" = "memory B-cell",
+                         "17" = "basophil"
+                        )
+
+total.harmony <- AddMetaData(total.harmony, metadata = cluster_to_celltype[total.harmony$seurat_clusters], col.name = "CellType")
+
+```
+
+
+```{r, cache=TRUE}
+DimPlot(total.harmony, group.by = "CellType", label = TRUE, repel = TRUE)
+```
+In case Seurat generates random UMAP when knitting, I have attached screen shot below:
+![](result0.png)
+
+```{r,cache=TRUE}
+#gene_name <- top_genes_per_cluster$gene
+
+FeaturePlot(total.harmony, features = 'IL7R')
+FeaturePlot(total.harmony, features = 'RGS5')
+FeaturePlot(total.harmony, features = 'APOC1')
+FeaturePlot(total.harmony, features = 'GZMH')
+FeaturePlot(total.harmony, features = 'CXCL13')
+FeaturePlot(total.harmony, features = 'GNLY')
+FeaturePlot(total.harmony, features = 'S100A9')
+FeaturePlot(total.harmony, features = 'IGFBP5')
+FeaturePlot(total.harmony, features = 'CRYAB')
+FeaturePlot(total.harmony, features = 'MS4A1')
+FeaturePlot(total.harmony, features = 'TNFRSF18')
+FeaturePlot(total.harmony, features = 'STMN1')
+FeaturePlot(total.harmony, features = 'DEFB1')
+FeaturePlot(total.harmony, features = 'MT1G')
+FeaturePlot(total.harmony, features = 'TPSAB1')
+FeaturePlot(total.harmony, features = 'TMEM213')
+FeaturePlot(total.harmony, features = 'MZB1')
+FeaturePlot(total.harmony, features = 'APOD')
+```
+
+
+ 
+### Signature score
+
+```{r,cache=TRUE}
+total.harmony$celltype.cnd <- paste0(total.harmony$CellType,'_', total.harmony$group)
+#View(total.harmony@meta.data)
+Idents(total.harmony) <- total.harmony$celltype.cnd
+```
+
+```{r,cache=TRUE}
+set.seed(49)
+tcell <- subset(total.harmony, CellType == 'CD8+ T-cell')
+sig <- FindMarkers(tcell, ident.1 = 'CD8+ T-cell_normal', ident.2 = 'CD8+ T-cell_tumor',only.pos=F)
+#sig$abs_log2FC <- abs(sig$avg_log2FC)
+#sig <- sig %>%
+#  arrange(p_val_adj,desc(abs_log2FC)) %>%
+#  head(5)
+sig_found <- rownames(sig)
+```
+
+
+```{r,cache=TRUE}
+signature_given <- c("PDCD1", "CTLA4", "HAVCR2", "LAG3", "TOX")
+signature_genes <- c(sig_found, signature_given)
+tcell<- AddModuleScore(tcell, features= signature_genes)
+tcell$exh<- (tcell$Cluster1 +tcell$Cluster2+tcell$Cluster3+tcell$Cluster4+tcell$Cluster5)/5
+```
+
+
+```{r,cache=TRUE}
+VlnPlot(tcell, features = 'exh', group.by = 'group', pt.size = 0.5)
+```
+
+
+```{r,cache=TRUE}
+z1<-tcell$exh[which(tcell$group=="normal")]
+z2<-tcell$exh[which(tcell$group=="tumor")]
+```
+
+
+```{r,cache=TRUE}
+test_result <- wilcox.test(exh ~ group, data = tcell@meta.data)
+print(test_result)
+```
+
+
+```{r,cache=TRUE}
+boxplot(exh ~ group, data = tcell@meta.data,
+        xlab = "Group", ylab = "exhaustion score",
+        main = "Box Plot of exhaustion score by Group")
+```
+
