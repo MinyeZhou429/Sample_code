@@ -1,0 +1,338 @@
+---
+title: "HW2"
+author: "Minye Zhou"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+## Part I: Differential expression
+
+```{r libraries, message = FALSE}
+# ```{r install, eval = FALSE}
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# BiocManager::install("sva")
+# BiocManager::install("DESeq2")
+# BiocManager::install("tximport")
+# install.packages(c("ggplot2", "dplyr",
+#                    "fgsea","pheatmap"))
+library(ggplot2)
+library(sva)
+library(DESeq2)
+library(tximport)
+library(dplyr)
+library(fgsea)
+library(pheatmap)
+library(ComplexHeatmap)
+library(EnhancedVolcano)
+library(factoextra)
+```
+
+
+```{r}
+# read all files
+batch <- read.csv("/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/batch.csv")
+id2gene <- read.csv("/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/tx2gene.csv")
+```
+
+```{r}
+# using tximport
+files <- c("/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/Salmon_results/N1.sf", "/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/Salmon_results/N2.sf","/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/Salmon_results/N3.sf","/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/Salmon_results/N4.sf","/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/Salmon_results/N5.sf","/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/Salmon_results/N6.sf","/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/Salmon_results/N7.sf","/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/Salmon_results/N8.sf","/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/Salmon_results/N9.sf","/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/Salmon_results/N10.sf","/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/Salmon_results/T1.sf","/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/Salmon_results/T2.sf","/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/Salmon_results/T3.sf","/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/Salmon_results/T4.sf","/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/Salmon_results/T5.sf","/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/Salmon_results/T6.sf","/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/Salmon_results/T7.sf","/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/Salmon_results/T8.sf","/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/Salmon_results/T9.sf","/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/Salmon_results/T10.sf") 
+names(files) <- c("N1", "N2","N3","N4","N5","N6","N7","N8","N9","N10","T1","T2","T3","T4","T5","T6","T7","T8","T9","T10") 
+txi <- tximport(files, type = "salmon", tx2gene = id2gene)
+gene_tpm <- txi$abundance
+colData <- data.frame(sample = c("N1", "N2","N3","N4","N5","N6","N7","N8","N9","N10","T1","T2","T3","T4","T5","T6","T7","T8","T9","T10") , batch = batch$batch, tissue = batch$tissue)
+rownames(colData) <- colnames(counts)
+```
+
+### pca and visualization
+```{r}
+#pca
+log2tpm <- log2(gene_tpm+1)
+#scaled_tpm <- scale(log2tpm)
+transposed_tpm <- t(log2tpm)
+pca <- prcomp(transposed_tpm)
+pc_scores <- data.frame(sample = colData$sample, tissue = colData$tissue, batch = colData$batch, pca$x)
+```
+
+```{r}
+ggplot(pc_scores, aes(x = PC1, y = PC2, shape = tissue, color = batch)) +
+  geom_point(size = 4)
+```
+
+
+```{r}
+dist_mat <- dist(transposed_tpm, method="euclidean")
+hc <- hclust(dist_mat, method="complete")
+plot(hc)
+```
+
+
+### batch effect
+
+```{r}
+#filter
+combat_input <- transposed_tpm[, apply(transposed_tpm, 2, var) != 0 ]
+
+combat_dat <- ComBat(t(combat_input), colData$batch, par.prior = TRUE)
+#combat_dat2 <- ComBat(txi$counts, colData$batch, par.prior = TRUE)
+```
+
+```{r}
+pca2 <- prcomp(t(combat_dat))
+pc_scores2<- data.frame(sample = colData$sample, tissue = colData$tissue, batch = colData$batch, pca2$x)
+ggplot(pc_scores2, aes(x = PC1, y = PC2, shape = tissue, color = batch)) +
+  geom_point(size = 4)
+```
+
+```{r}
+dist_mat2 <- dist(t(combat_dat), method="euclidean")
+hc2 <- hclust(dist_mat2, method="complete")
+plot(hc2)
+```
+
+
+### DE Analysis
+
+```{r}
+ddsTxi <- DESeqDataSetFromTximport(txi,
+                                   colData = batch,
+                                   design = ~ batch + tissue)
+dds <- DESeq(ddsTxi)
+
+# Extract results for tumor vs normal
+#res <- results(dds,contrast = c("tissue", "Tumor", "Normal"))
+res <- results(dds)
+resultsNames(dds)
+
+
+# Filter for significant differentially expressed genes
+up_tumor_results <- subset(res, padj < 0.01 & log2FoldChange > 1)
+dim(up_tumor_results)
+tumor_res_sorted <- up_tumor_results[order(-up_tumor_results$log2FoldChange),]
+top_genes_tumor <- head(tumor_res_sorted@rownames, 5)
+
+up_normal_results <- subset(res, padj < 0.01 & log2FoldChange < -1)
+normal_res_sorted <- up_normal_results[order(up_normal_results$log2FoldChange),]
+top_genes_normal <- head(normal_res_sorted@rownames, 5)
+```
+
+```{r}
+print(top_genes_tumor)
+```
+
+```{r}
+print(top_genes_normal)
+```
+
+
+###Visualize the differential gene expression values
+
+```{r}
+resApeT <- lfcShrink(dds, coef = "tissue_Tumor_vs_Normal", type="apeglm", lfcThreshold=1)
+diff_gene <- data.frame(subset(resApeT,svalue < 0.01 & abs(log2FoldChange) > 1 ))
+plotMA(resApeT, ylim=c(-3,3), cex=.8)
+abline(h=c(-1,1), col="dodgerblue", lwd=2)
+```
+
+```{r}
+ggplot(data.frame(resApeT), aes(x=log2FoldChange, y=-log10(svalue))) +
+  geom_point(aes(color=ifelse(log2FoldChange > 1 & svalue < 0.01, "Up-regulated", 
+                               ifelse(log2FoldChange < -1 & svalue < 0.01, "Down-regulated", "Not significant"))),
+             size=2.5) +
+  scale_color_manual(values=c("blue", "gray", "red")) +
+  theme_classic() +
+  xlab("Log2 Fold Change") + ylab("-log10(FDR)") +
+  ggtitle("Volcano Plot") +
+  geom_vline(xintercept=c(-1, 1), linetype="dashed") +
+  geom_hline(yintercept=-log10(0.01), linetype="dashed") +
+  guides(color=guide_legend(title="Regulation Status"))
+```
+
+
+
+### kmeans clustering
+
+```{r}
+# use count as input, sample
+set.seed(123) # set random seed for reproducibility
+sig <- subset(res, padj < 0.01 & abs(log2FoldChange) > 1)
+sig_genes <- rownames(sig)
+kmeans_dat <- combat_dat[rownames(combat_dat) %in% sig_genes,]
+k_clusters4 <- kmeans(kmeans_dat, centers = 4)
+table(k_clusters4$cluster)
+``` 
+
+```{r}
+k_clusters7 <- kmeans(kmeans_dat, centers = 7)
+table(k_clusters7$cluster)
+```
+
+```{r}
+#heatmap_cluster4 <- cbind(kmeans_dat,k_clusters4$cluster)
+#heatmap_cluster4 <- data.frame(heatmap_cluster4)
+#heatmap_cluster4 <- heatmap_cluster4[order(heatmap_cluster4$V21),]
+Heatmap(kmeans_dat,row_km = 4, show_row_names = FALSE, use_raster = FALSE)
+```
+
+```{r}
+Heatmap(kmeans_dat,row_km = 7, show_row_names = FALSE)
+```
+
+### Pathway enrichment analysis
+
+```{r}
+pathway_file <- gmtPathways("/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data1/c2.cp.kegg.v7.1.symbols.gmt")
+```
+
+```{r}
+results_vec <- cbind(gene = rownames(sig), as.data.frame(sig))
+```
+
+```{r}
+results_vec <- na.omit(results_vec)
+ranks <- results_vec$log2FoldChange
+names(ranks) <- results_vec$gene
+head(ranks)
+```
+
+
+```{r}
+fgseaRes <- fgsea(pathway_file, ranks)
+q9_res <- subset(fgseaRes,padj < 0.01)
+top5 <- head(q9_res[order(-abs(NES)), ], n=5)$pathway
+plotEnrichment(pathway_file[["KEGG_CELL_CYCLE"]], ranks)
+plotGseaTable(pathway_file[top5],ranks,fgseaRes) 
+```
+
+
+## Part II: Sample classification
+
+```{r, warning=FALSE, cache=FALSE, message=FALSE}
+library(ggplot2)
+library(ggfortify)
+library(pROC)
+library(caret)
+```
+
+### Dimension reduction
+
+```{r, warning=FALSE, cache=FALSE, message=FALSE}
+dat <- read.csv("/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data2/BRCA_zscore_data.txt", sep = "")
+```
+
+```{r}
+pheno <- read.delim("/n/academic_homes/g113651/u431618g113651/shared_data/HW2/raw_data2/BRCA_phenotype.txt")
+```
+
+```{r}
+pca_cancer <- prcomp(dat, center = TRUE, scale. = TRUE)
+pc_scores_cancer <- data.frame(sample = pheno$sample, phenotype = pheno$phenotype,  pca_cancer$x)
+pca_variance = round(pca_cancer$sdev^2/sum(pca_cancer$sdev^2)*100,1)
+ggplot(pc_scores_cancer, aes(x = PC1, y = PC2, color = phenotype)) +
+  geom_point(size = 4)+
+  xlab(paste("PC1 ",pca_variance[1],"%",sep = ' '))+
+  ylab(paste("PC2 ",pca_variance[2],"%",sep = ' '))+
+  ggtitle(paste("PC1 + PC2 explain", round(sum(pca_cancer$sdev[1:2]^2) / sum(pca_cancer$sdev^2) * 100, 1), "% of the total variance"))
+```
+
+
+### Select number of PCs
+
+```{r, warning=FALSE, cache=FALSE, message=FALSE}
+var_explained <- pca_cancer$sdev^2 / sum(pca_cancer$sdev^2)
+cum_var_explained <- cumsum(var_explained)
+
+# Plot
+ggplot(data.frame(PC = 1:100, Cumulative_Variance = cum_var_explained[1:100]), aes(x = PC, y = Cumulative_Variance)) +
+  geom_line() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "PC", y = "Cumulative % Variance Explained") +
+  ggtitle("Cumulative % Variance Explained by the Top 100 PCs")
+```
+```{r}
+fviz_eig(pca_cancer, addlabels=TRUE, ylim=c(0,100), geom = c("bar", "line"), barfill = "gold", barcolor="grey",linecolor = "red", ncp=100)+
+labs(title = "PCA Coverage",
+         x = "Principal Components", y = "% of variances")
+```
+
+
+```{r}
+pc90 <- which(cum_var_explained >= 0.9)[1]
+pc90
+```
+
+
+### Machine learning
+
+
+```{r, warning=FALSE, cache=FALSE, message=FALSE}
+library(kernlab)
+set.seed(123)
+training_X <- pca_cancer$x[, 1:25]
+training_Y <- pheno$phenotype
+```
+
+```{r}
+#KNN
+ctrl <- trainControl(method = "cv", number = 5)
+knn_model <- train(x = training_X, y = training_Y, method = "knn", trControl = ctrl)
+#print(knn_model)
+```
+
+```{r,warning=FALSE, cache=FALSE, message=FALSE}
+#logistic regression
+logistic_model <- train(x = training_X, y = training_Y, method = "glm", family = "binomial", trControl = ctrl)
+#print(logistic_model)
+```
+
+```{r}
+#Ridge regression
+lambda <- 10^seq(-3, 3, length = 100)
+ridge_model <- train(x = training_X, y = training_Y, method = "glmnet", trControl = ctrl,tuneGrid = expand.grid(alpha = 0, lambda = lambda))
+#print(ridge_model)
+```
+
+```{r}
+#LASSO
+lasso_model <- train(x = training_X, y = training_Y, method = "glmnet", trControl = ctrl,tuneGrid = expand.grid(alpha = 1, lambda = lambda))
+
+#print(lasso_model)
+```
+
+```{r}
+#ElasticNet
+enet_model <- train(x = training_X, y = training_Y, method = "glmnet", trControl = ctrl,tuneLength = 10)
+
+#print(enet_model)
+```
+
+```{r}
+#random forest
+rf_model <- train(x = training_X, y = training_Y, method = "rf", trControl = ctrl)
+
+#print(rf_model)
+```
+
+```{r}
+#SVM
+svm_model <- train(x = training_X, y = training_Y, method = "svmRadial", trControl = ctrl)
+
+#print(svm_model)
+```
+
+### Model selection
+
+```{r}
+library(tidymodels)
+library(resample)
+models <- list(knn = knn_model,logistic = logistic_model,ridge = ridge_model,lasso = lasso_model,enet = enet_model,rf = rf_model,svm = svm_model)
+
+results <- resamples(models)
+summary(results)
+perf <- results$values
+
+print(perf)
+dotplot(results)
+```
+
